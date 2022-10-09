@@ -1,10 +1,10 @@
-use std::{str::FromStr, sync::Arc, time::Duration};
-
 use crate::{
     construct_simple_eth_transfer_tx, EthAmount, EthError, EthNetwork, SecretKey, WalletCoin,
     WalletCoinFunc,
 };
 use ethers::prelude::{Address, LocalWallet, Middleware, Signer, SignerMiddleware};
+use ethers::types::transaction::eip2718::TypedTransaction;
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 #[cfg(not(target_arch = "wasm32"))]
 use ethers::utils::hex::ToHex;
@@ -297,6 +297,60 @@ pub async fn broadcast_contract_approval_tx(
     }
 }
 
+pub async fn build_contract_approval_tx(
+    approval_details: ContractApproval,
+    network: EthNetwork,
+    web3api_url: &str,
+) -> Result<TypedTransaction, EthError> {
+    let (_chain_id, legacy) = network.to_chain_params()?;
+
+    let client = get_ethers_provider(web3api_url).await?;
+    match approval_details {
+        ContractApproval::Erc20 {
+            contract_address,
+            approved_address,
+            amount,
+        } => {
+            let approved_address = address_from_str(&approved_address)?;
+            let amount = u256_from_dec_str(&amount)?;
+            let contract = Contract::new_erc20(&contract_address, client)?;
+            let call = contract.approve(approved_address, amount);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractApproval::Erc721Approve {
+            contract_address,
+            approved_address,
+            token_id,
+        } => {
+            let approved_address = address_from_str(&approved_address)?;
+            let token_id = u256_from_str(&token_id)?;
+            let contract = Contract::new_erc721(&contract_address, client)?;
+            let call = contract.approve(approved_address, token_id);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractApproval::Erc721SetApprovalForAll {
+            contract_address,
+            approved_address,
+            approved,
+        } => {
+            let approved_address = address_from_str(&approved_address)?;
+            let contract = Contract::new_erc721(&contract_address, client)?;
+            let call = contract.set_approval_for_all(approved_address, approved);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractApproval::Erc1155 {
+            contract_address,
+            approved_address,
+            approved,
+        } => {
+            let approved_address = address_from_str(&approved_address)?;
+            let contract = Contract::new_erc1155(&contract_address, client)?;
+            let call = contract.set_approval_for_all(approved_address, approved);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+    }
+}
+
 /// given the contract transfer details, it'll construct, sign and broadcast
 /// a corresponding transfer transaction.
 /// If successful, it returns the transaction receipt.
@@ -409,6 +463,109 @@ pub async fn broadcast_contract_transfer_tx(
     }
 }
 
+pub async fn build_contract_transfer_tx(
+    transfer_details: ContractTransfer,
+    network: EthNetwork,
+    web3api_url: &str,
+) -> Result<TypedTransaction, EthError> {
+    let (_chain_id, legacy) = network.to_chain_params()?;
+
+    let client = get_ethers_provider(web3api_url).await?;
+    match transfer_details {
+        ContractTransfer::Erc20Transfer {
+            contract_address,
+            to_address,
+            amount,
+        } => {
+            let to_address = address_from_str(&to_address)?;
+            let amount = u256_from_dec_str(&amount)?;
+            let contract = Contract::new_erc20(&contract_address, client)?;
+            let call = contract.transfer(to_address, amount);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractTransfer::Erc20TransferFrom {
+            contract_address,
+            from_address,
+            to_address,
+            amount,
+        } => {
+            let from_address = address_from_str(&from_address)?;
+            let to_address = address_from_str(&to_address)?;
+            let amount = u256_from_dec_str(&amount)?;
+            let contract = Contract::new_erc20(&contract_address, client)?;
+            let call = contract.transfer_from(from_address, to_address, amount);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractTransfer::Erc721TransferFrom {
+            contract_address,
+            from_address,
+            to_address,
+            token_id,
+        } => {
+            let token_id = u256_from_str(&token_id)?;
+            let to_address = address_from_str(&to_address)?;
+            let from_address = address_from_str(&from_address)?;
+            let contract = Contract::new_erc721(&contract_address, client)?;
+            let call = contract.transfer_from(from_address, to_address, token_id);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractTransfer::Erc721SafeTransferFrom {
+            contract_address,
+            from_address,
+            to_address,
+            token_id,
+        } => {
+            let token_id = u256_from_str(&token_id)?;
+            let to_address = address_from_str(&to_address)?;
+            let from_address = address_from_str(&from_address)?;
+            let contract = Contract::new_erc721(&contract_address, client)?;
+            let call = contract.safe_transfer_from(from_address, to_address, token_id);
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractTransfer::Erc721SafeTransferFromWithAdditionalData {
+            contract_address,
+            from_address,
+            to_address,
+            token_id,
+            additional_data,
+        } => {
+            let token_id = u256_from_str(&token_id)?;
+            let to_address = address_from_str(&to_address)?;
+            let from_address = address_from_str(&from_address)?;
+            let contract = Contract::new_erc721(&contract_address, client)?;
+            let call = contract.safe_transfer_from_with_data(
+                from_address,
+                to_address,
+                token_id,
+                additional_data.into(),
+            );
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+        ContractTransfer::Erc1155SafeTransferFrom {
+            contract_address,
+            from_address,
+            to_address,
+            token_id,
+            amount,
+            additional_data,
+        } => {
+            let token_id = u256_from_str(&token_id)?;
+            let amount = u256_from_dec_str(&amount)?;
+            let to_address = address_from_str(&to_address)?;
+            let from_address = address_from_str(&from_address)?;
+            let contract = Contract::new_erc1155(&contract_address, client)?;
+            let call = contract.safe_transfer_from(
+                from_address,
+                to_address,
+                token_id,
+                amount,
+                additional_data.into(),
+            );
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
+        }
+    }
+}
+
 /// given the contract batch-transfer details, it'll construct, sign and
 /// broadcast a corresponding transfer transaction.
 /// If successful, it returns the transaction receipt.
@@ -455,6 +612,48 @@ pub async fn broadcast_contract_batch_transfer_tx(
                 additional_data.into(),
             );
             ContractCall::from(call).legacy(legacy).send().await
+        }
+    }
+}
+
+pub async fn build_contract_batch_transfer_tx(
+    details: ContractBatchTransfer,
+    network: EthNetwork,
+    web3api_url: &str,
+) -> Result<TypedTransaction, EthError> {
+    let (_chain_id, legacy) = network.to_chain_params()?;
+
+    let client = get_ethers_provider(web3api_url).await?;
+    match details {
+        ContractBatchTransfer::Erc1155 {
+            contract_address,
+            from_address,
+            to_address,
+            token_ids,
+            amounts,
+            additional_data,
+        } => {
+            let to_address = address_from_str(&to_address)?;
+            let from_address = address_from_str(&from_address)?;
+            let token_ids = token_ids
+                .iter()
+                .map(|val| u256_from_str(val))
+                .collect::<Result<Vec<U256>, _>>()?;
+            let amounts = amounts
+                .iter()
+                .map(|val| u256_from_dec_str(val))
+                .collect::<Result<Vec<U256>, _>>()?;
+
+            let contract = Contract::new_erc1155(&contract_address, client)?;
+
+            let call = contract.safe_batch_transfer_from(
+                from_address,
+                to_address,
+                token_ids,
+                amounts,
+                additional_data.into(),
+            );
+            Ok(ContractCall::from(call).legacy(legacy).get_tx())
         }
     }
 }

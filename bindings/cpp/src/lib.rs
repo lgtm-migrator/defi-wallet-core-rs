@@ -1129,6 +1129,23 @@ pub fn build_eth_signed_tx(
     Ok(signedtx)
 }
 
+pub fn build_eth_signed_tx_with_signature(
+    tx_info: ffi::EthTxInfoRaw,
+    network: &str,
+    from_address: &str,
+    signature: Vec<u8>, // 65 bytes
+) -> Result<Vec<u8>> {
+    let signedtx = defi_wallet_core_common::build_signed_eth_tx_with_signature(
+        tx_info.into(),
+        EthNetwork::Known {
+            name: network.into(),
+        },
+        from_address,
+        signature,
+    )?;
+    Ok(signedtx)
+}
+
 /// sign cronos tx with private key in custom network
 pub fn build_custom_eth_signed_tx(
     tx_info: ffi::EthTxInfoRaw,
